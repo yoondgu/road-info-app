@@ -77,8 +77,12 @@ public class RoadService {
 			}
 			JsonArray matchedPoints = rootob.get("matchedPoints").getAsJsonArray();
 			
-			// JsonArray 객체의 정보를 조작하여 반환할 리스트 생성해서 응답객체로 반환하기
-			return ListResponseData.create(matchedPointsToResultList(requestCoords, matchedPoints));
+			// JsonArray 객체의 정보를 조작하여 반환할 리스트 생성해서 응답객체로 반환하고 CSV파일에 저장하기
+			List<MatchedPoint> result = matchedPointsToResultList(requestCoords, matchedPoints);
+			// TODO 읽기/쓰기 중 무엇이든 오류가 났을때 트랜잭션 처리
+			insertLocationInfos(result);
+			
+			return ListResponseData.create(result);
 		} catch (Exception e) {
 			e.printStackTrace();
 			return ResponseData.create(false, "오류가 발생했습니다.");
@@ -104,7 +108,7 @@ public class RoadService {
 					matchedPoint.setSourceLocation(requestCoords.get(sourceIndex));
 					matchedPoint.setIdxName(obj.get("idxName").getAsString());
 					matchedPoint.setLinkId(obj.get("linkId").getAsString());
-					matchedPoint.setSpeed(obj.get("speed").getAsInt());
+					matchedPoint.setSpeed(obj.get("speed").getAsString());
 					matchedPoint.setRoadCategoryName(roadCategories[obj.get("roadCategory").getAsInt()]);
 					resultData.add(matchedPoint);
 					matched[sourceIndex] = true;
@@ -114,7 +118,7 @@ public class RoadService {
 		return resultData;
 	}
 	
-	public static List<Coord> selectCsvCoords(double unitDistance) {
+	public static List<Coord> selectLocations(double unitDistance) {
 		List<List<String>> csvList = CSVUtil.read();
 		List<Coord> coords = new ArrayList<>();
 		
@@ -124,17 +128,20 @@ public class RoadService {
 			List<String> aLine = csvList.get(i);
 			
 			// 좌표간의 거리를 계산해서 Nm 간격의 좌표만 리스트에 담는다.
-			if (i == 1) {
+			// 단, 가장 첫번째 좌표와 마지막 좌표는 무조건 담는다.
+			if (i == 1 || i == csvList.size()-1) {
 				lat1 = Double.parseDouble(aLine.get(2));
 				lon1 = Double.parseDouble(aLine.get(3));
-			}
-			double lat2 = Double.parseDouble(aLine.get(2));
-			double lon2 = Double.parseDouble(aLine.get(3));
-			double distance = new HaversineDistance(lat1, lon1, lat2, lon2).getDistance();
-			if (unitDistance < distance) {
-				coords.add(new Coord(lat2, lon2, i-1));
-				lat1 = lat2;
-				lon1 = lon2;
+				coords.add(new Coord(lat1, lon1, i-1));
+			} else {
+				double lat2 = Double.parseDouble(aLine.get(2));
+				double lon2 = Double.parseDouble(aLine.get(3));
+				double distance = new HaversineDistance(lat1, lon1, lat2, lon2).getDistance();
+				if (unitDistance < distance) {
+					coords.add(new Coord(lat2, lon2, i-1));
+					lat1 = lat2;
+					lon1 = lon2;
+				}
 			}
 		}
 		// TODO 획득한 좌표개수가 최대 지원수를 넘을 경우 처리하기
@@ -142,7 +149,7 @@ public class RoadService {
 	}
 
 	
-	public static void writeCsvSpeedlimits(List<MatchedPoint> points) {
+	public static void insertLocationInfos(List<MatchedPoint> points) {
 		// csv파일의 특정 좌표에 해당하는 행에 속도제한 정보를 저장한다.
 		CSVUtil.write(points);
 	}

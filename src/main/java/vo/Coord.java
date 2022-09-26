@@ -2,7 +2,7 @@ package vo;
 
 public class Coord {
 
-	private int csvIdx; // csv파일의 행순서 (0번부터 시작)
+	private int csvIdx; // csv파일의 행순서 (0번부터 저장, csvIdx가 0이면 csv파일의 2번째 행이다.)
 	private double latitude;
 	private double longitude;
 	

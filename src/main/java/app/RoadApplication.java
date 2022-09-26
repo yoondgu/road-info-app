@@ -13,7 +13,7 @@ public class RoadApplication {
 
 	public static void main(String[] args) {
 		// CSV파일에서 특정 거리에 따라 요청할 좌표 선별하여 리스트에 저장
-		List<Coord> rqCoords = RoadService.selectCsvCoords(0.05); // 50m 단위로 조회
+		List<Coord> rqCoords = RoadService.selectLocations(0.05); // 50m 단위로 조회
 		
 		// TODO AWS Lambda 통해 값 반환
 		ResponseData responseData = RoadService.getRoadInfo(rqCoords, 100);
@@ -21,6 +21,5 @@ public class RoadApplication {
 		String response = gson.toJson(responseData);
 		System.out.println(response);
 		
-		// TODO CSV파일에 값 저장
 	}
 }
