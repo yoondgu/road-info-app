@@ -64,7 +64,8 @@ public class CSVUtil {
         try {
         	// csv파일의 기존 값에 이어쓰려면 위처럼 true를 지정하고, 기존 값을 덮어쓰려면 true를 삭제한다
             bw = new BufferedWriter(new FileWriter(csv));
-            // 0번째 행은 그대로이다.
+            // TODO 처음 받은 파일에 입력할 정보의 열명 써있는지 여부에 따라 수정할 것
+            // 열명이 미리 써있다면 0번째 행은 그대로이다.
             bw.write(generateString(csvList.get(0)));
             bw.newLine();
             

@@ -37,7 +37,6 @@ public class RoadService {
 		if (maxCount != 100 && maxCount != 500 && maxCount != 1000) {
 			return ResponseData.create(false, "요청좌표의 최대 개수가 올바르지 않습니다. (100,500,1000 중 선택할 것)");
 		}
-		
 		if (requestCoords.size() > maxCount) {
 			return ResponseData.create(false, "요청좌표의 개수가 지원하는 최대값을 초과합니다.");
 		}
