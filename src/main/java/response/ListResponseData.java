@@ -9,6 +9,7 @@ public class ListResponseData<T> extends ResponseData {
 	public static <T> ListResponseData<T> create(List<T> items) {
 		ListResponseData<T> responseData = new ListResponseData<>();
 		responseData.setSuccess(true);
+//		responseData.setCode(200);
 		responseData.setItems(items);
 		
 		return responseData;

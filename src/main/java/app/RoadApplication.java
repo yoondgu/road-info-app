@@ -1,22 +1,16 @@
 package app;
 
-import java.util.List;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import response.ResponseData;
 import service.RoadService;
-import vo.Coord;
 
 public class RoadApplication {
 
 	public static void main(String[] args) {
-		// CSV파일에서 특정 거리에 따라 요청할 좌표 선별하여 리스트에 저장
-		List<Coord> rqCoords = RoadService.selectLocations(0.05); // 50m 단위로 조회
-		
 		// TODO AWS Lambda 통해 값 반환
-		ResponseData responseData = RoadService.getRoadInfo(rqCoords, 100);
+		ResponseData responseData = RoadService.getRoadInfo(0.05, 100); // km단위로 단위거리 입력(ex: 최소 50m 간격의 좌표들을 기준으로 조회), 최대 지원하는 요청좌표 개수 100개
 		Gson gson = new GsonBuilder().setPrettyPrinting().create();
 		String response = gson.toJson(responseData);
 		System.out.println(response);
