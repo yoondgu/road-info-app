@@ -29,52 +29,32 @@ public class RoadService {
 	 * skopenapi에서 제공하는 원도로등급 인덱스 별 명칭
 	 * 원도로등급 (0:고속국도, 1:도시고속화도로, 2:국도, 3;국가지원지방도, 4:지방도, 5:주요도로 1, 6:주요도로 2, 7:주요도로 3, 8:기타도로 1, 9:이면도로, 10:페리항로, 11:단지내도로, 12 :이면도로 2(세도로))
 	 */
-	final static String[] roadCategories = {"고속국도", "도시고속화도로", "국도", "국가지원지방도", "지방도", "주요도로 1", "주요도로 2", "주요도로 3", "기타도로 1", "이면도로", "페리항로", "단지내도로", "이면도로 2(세도로)"};
+	private final static String[] roadCategories = {"고속국도", "도시고속화도로", "국도", "국가지원지방도", "지방도", "주요도로 1", "주요도로 2", "주요도로 3", "기타도로 1", "이면도로", "페리항로", "단지내도로", "이면도로 2(세도로)"};
 	
-	private static String coordsToString(List<Coord> coords) {
-		// 파라미터로 받은 좌표 리스트를 SK open API 요청형식에 맞는 쿼리스트링으로 변환
-		StringJoiner sj = new StringJoiner("|");
-		for (int i = 0; i < coords.size(); i++) {
-			Coord coord = coords.get(i);
-			sj.add(coord.getLongitude() + "," + coord.getLatitude());
-		}
-		return sj.toString();
-	}
-	
-	// 요청정보의 전체 이동거리를 m 단위로 반환한다. 전달받은 csvList이 빈 리스트이면 -1을 반환한다.
-//	private static double getTotalDistance(List<List<String>> csvList) {
-//		double totalDist = -1;
-//		if (csvList.size() > 1) {
-//			totalDist = 0;
-//			for (int i = 1; i < csvList.size(); i++) {
-//				double speed = Double.parseDouble(csvList.get(i).get(7)); // speed는 csv파일의 속력(m/s)
-//				if (speed > 0) {
-//					totalDist += speed;
-//				}
-//			}
-//		}
-//		return totalDist;
-//	}
-	
-	public static ResponseData getRoadInfo(double unitDistance, int maxCount) {
-		// matchToRoads api는 도로정보를 조회하기 위한 좌표를 최대 100/500/1000개까지 지원하고, 이에 따라 요청 url이 달라진다.
-		if (maxCount == 0) {
-			maxCount = 100;
-		}
-		if (maxCount != 100 && maxCount != 500 && maxCount != 1000) {
-			return ResponseData.create(false, "요청좌표의 최대 개수가 올바르지 않습니다. (100,500,1000 중 선택할 것)");
-		}
-
+	// matchToRoads api는 도로정보를 조회하기 위한 좌표를 최대 100/500/1000개까지 지원하고, 이에 따라 요청 url이 달라진다.
+	// 지원 범위에 따라 비용이 다르므로 csv파일로 계산한 요청좌표 개수에 따라 최소비용의 maxCount를 자동으로 설정한다.
+	public static ResponseData getRoadInfo(double unitDistance) {
 		// TODO 통신,읽기/쓰기 작업 시 시간지연 오류 처리
 		try {
-			List<Coord> requestCoords = selectLocations(unitDistance, maxCount);
-			String coordsString = coordsToString(requestCoords);
+			List<Coord> requestCoords = selectLocations(unitDistance);
+			int maxCount = 100;
+			int coordsSize = requestCoords.size();
+			if (coordsSize > maxCount) {
+				if (coordsSize > 1000) {
+					return ResponseData.create(false, "요청좌표의 개수가 1000개를 초과합니다.");
+				} else if (coordsSize > 500) {
+					maxCount = 1000;
+				} else {
+					maxCount = 500;
+				}
+			}
+			System.out.println("설정한 요청좌표 최대 지원개수: " + maxCount);
 			
 			// SK open API에 http 요청 보내기 : 특정 좌표 리스트에 매칭되는 도로 정보 리스트 요청
 			// OkHttpClient 객체 생성
 			OkHttpClient client = new OkHttpClient();
 			MediaType mediaType = MediaType.parse("application/x-www-form-urlencoded");
-			RequestBody body = RequestBody.create("responseType=1&coords=" + coordsString, mediaType);
+			RequestBody body = RequestBody.create("responseType=1&coords=" + coordsToString(requestCoords), mediaType);
 			Request request = new Request.Builder()
 					.url("https://apis.openapi.sk.com/tmap/road/matchToRoads" + (maxCount == 100 ? "" : maxCount) + "?version=1")
 					.post(body)
@@ -95,7 +75,8 @@ public class RoadService {
 				JsonArray matchedPoints = rootob.get("matchedPoints").getAsJsonArray();
 				// JsonArray 객체의 정보를 조작하여 반환할 리스트 생성해서 응답객체로 반환하고 CSV파일에 저장하기
 				List<MatchedPoint> result = matchedPointsToResultList(requestCoords, matchedPoints);
-
+				insertLocationInfos(result);
+				
 				return ListResponseData.create(result);
 			} else {
 				return ResponseData.create(false, "SK open API 응답 오류: " + response.message(), response.code());
@@ -106,8 +87,18 @@ public class RoadService {
 			return ResponseData.create(false, "서버 오류: " + e.getMessage());
 		}
 	}
+
+	private static String coordsToString(List<Coord> coords) {
+		// 파라미터로 받은 좌표 리스트를 SK open API 요청형식에 맞는 쿼리스트링으로 변환
+		StringJoiner sj = new StringJoiner("|");
+		for (int i = 0; i < coords.size(); i++) {
+			Coord coord = coords.get(i);
+			sj.add(coord.getLongitude() + "," + coord.getLatitude());
+		}
+		return sj.toString();
+	}
 	
-	public static List<MatchedPoint> matchedPointsToResultList(List<Coord> requestCoords, JsonArray matchedPoints) {
+	private static List<MatchedPoint> matchedPointsToResultList(List<Coord> requestCoords, JsonArray matchedPoints) {
 		List<MatchedPoint> resultData = new ArrayList<>();
 
 		// 요청좌표 중 매칭되는 지점으로 객체를 만들어 리스트에 저장할 때, 해당 요청좌표의 인덱스가 i일 때 matched[i]에 true를 저장한다.
@@ -136,11 +127,9 @@ public class RoadService {
 		return resultData;
 	}
 	
-	// 자동차 속력은 일반적으로 60~80km/h 이므로 초당 16~22m 이동한다고 볼 수 있다. 따라서 앞 뒤 좌표간의 거리가 단위거리보다 크더라도 그 차이가 아주 크지 않으므로 별도 고려할 필요 x(정밀도의 문제)
-	// 요청좌표 개수 관련 처리 alt: 좌표 객체를 만들기 전에 미리 CSV에 저장된 주행정보의 총 거리를 구해서 대략적인 요청좌표 수를 계산한 뒤 maxCount보다 크면 줄인다 => 부정확, 각 좌표를 하나씩 검사하기 전까지는 알 수 없으므로 보류
-	// double totalDist = getTotalDistance(csvList);
-	// System.out.println("전체 이동거리: " + totalDist);
-	public static List<Coord> selectLocations(double unitDistance, int maxCount) throws FileNotFoundException, IOException {
+	// 단위거리 정밀도 관련 : 자동차 속력은 일반적으로 60~80km/h 이므로 초당 16~22m 이동한다고 볼 수 있다. 따라서 앞 뒤 좌표간의 거리가 단위거리보다 크더라도 그 차이가 아주 크지 않으므로 별도 고려할 필요 x
+	// 요청좌표 개수 관련 처리 : maxCount보다 반환값의 size가 클 경우 요청보내는 maxCount 설정을 바꾼다. (ex: 100이면 500이나 1000, 1000이면 예외처리) => getRoadInfo 메소드에서 처리
+	private static List<Coord> selectLocations(double unitDistance) throws FileNotFoundException, IOException {
 		List<List<String>> csvList = CSVUtil.read();
 		List<Coord> coords = new ArrayList<>();
 		double lat1 = 0;
@@ -169,9 +158,8 @@ public class RoadService {
 		 System.out.println("요청좌표 개수: " + coords.size());
 		return coords;
 	}
-
 	
-	public static void insertLocationInfos(List<MatchedPoint> points) throws FileNotFoundException, IOException {
+	private static void insertLocationInfos(List<MatchedPoint> points) throws FileNotFoundException, IOException {
 		// csv파일의 특정 좌표에 해당하는 행에 속도제한 정보를 저장한다.
 		CSVUtil.write(points);
 	}
