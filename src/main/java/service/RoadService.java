@@ -41,9 +41,22 @@ public class RoadService {
 		return sj.toString();
 	}
 	
+	// 요청정보의 전체 이동거리를 m 단위로 반환한다. 전달받은 csvList이 빈 리스트이면 -1을 반환한다.
+//	private static double getTotalDistance(List<List<String>> csvList) {
+//		double totalDist = -1;
+//		if (csvList.size() > 1) {
+//			totalDist = 0;
+//			for (int i = 1; i < csvList.size(); i++) {
+//				double speed = Double.parseDouble(csvList.get(i).get(7)); // speed는 csv파일의 속력(m/s)
+//				if (speed > 0) {
+//					totalDist += speed;
+//				}
+//			}
+//		}
+//		return totalDist;
+//	}
+	
 	public static ResponseData getRoadInfo(double unitDistance, int maxCount) {
-		// TODO return으로 예외처리하는 코드들 모두 throw로 바꾸고 try/catch에서 처리?
-		
 		// matchToRoads api는 도로정보를 조회하기 위한 좌표를 최대 100/500/1000개까지 지원하고, 이에 따라 요청 url이 달라진다.
 		if (maxCount == 0) {
 			maxCount = 100;
@@ -55,10 +68,6 @@ public class RoadService {
 		// TODO 통신,읽기/쓰기 작업 시 시간지연 오류 처리
 		try {
 			List<Coord> requestCoords = selectLocations(unitDistance, maxCount);
-			if (requestCoords.size() > maxCount) {
-				return ResponseData.create(false, "요청좌표의 개수가 지원하는 최대값(" + maxCount + ")보다 많습니다.");
-			}
-			
 			String coordsString = coordsToString(requestCoords);
 			
 			// SK open API에 http 요청 보내기 : 특정 좌표 리스트에 매칭되는 도로 정보 리스트 요청
@@ -71,7 +80,7 @@ public class RoadService {
 					.post(body)
 					.addHeader("accept", "application/json")
 					.addHeader("Content-Type", "application/x-www-form-urlencoded")
-					.addHeader("appKey", "l7xx1317e6cad24d4f0d8048aa7336e5623b")
+					.addHeader("appKey", "l7xx6e3d85ee83db468daaa1fcc76f50932d")
 					.build();
 			Response response = client.newCall(request).execute();
 			
@@ -84,12 +93,9 @@ public class RoadService {
 					return ResponseData.create(false, "도로정보가 존재하지 않습니다.");
 				}
 				JsonArray matchedPoints = rootob.get("matchedPoints").getAsJsonArray();
-				
 				// JsonArray 객체의 정보를 조작하여 반환할 리스트 생성해서 응답객체로 반환하고 CSV파일에 저장하기
 				List<MatchedPoint> result = matchedPointsToResultList(requestCoords, matchedPoints);
-				// TODO 읽기/쓰기 중 무엇이든 오류가 났을때 트랜잭션 처리
-				insertLocationInfos(result);
-				
+
 				return ListResponseData.create(result);
 			} else {
 				return ResponseData.create(false, "SK open API 응답 오류: " + response.message(), response.code());
@@ -130,13 +136,12 @@ public class RoadService {
 		return resultData;
 	}
 	
+	// 자동차 속력은 일반적으로 60~80km/h 이므로 초당 16~22m 이동한다고 볼 수 있다. 따라서 앞 뒤 좌표간의 거리가 단위거리보다 크더라도 그 차이가 아주 크지 않으므로 별도 고려할 필요 x(정밀도의 문제)
+	// 요청좌표 개수 관련 처리 alt: 좌표 객체를 만들기 전에 미리 CSV에 저장된 주행정보의 총 거리를 구해서 대략적인 요청좌표 수를 계산한 뒤 maxCount보다 크면 줄인다 => 부정확, 각 좌표를 하나씩 검사하기 전까지는 알 수 없으므로 보류
+	// double totalDist = getTotalDistance(csvList);
+	// System.out.println("전체 이동거리: " + totalDist);
 	public static List<Coord> selectLocations(double unitDistance, int maxCount) throws FileNotFoundException, IOException {
 		List<List<String>> csvList = CSVUtil.read();
-		// TODO 단위거리에 비해 훨씬 먼 거리의 좌표들로 이루어져있을 때 그냥 똑같이 고를 건지?(ex: 5m기준인데 가장 가까운 두 좌표 간 거리가 50m여도 선택된다)
-		// 아니면 오차범위 내에서만 선택할 건지?
-		// TODO 좌표 객체를 만들기 전에 미리 CSV에 저장된 주행정보의 총 거리를 구하고, unitDistance로 나눠서 maxCount보다 크면 예외를 발생시킨다?
-		// TODO 아니면 예외발생시키고 여러개로 쪼개서 조회하기?
-		
 		List<Coord> coords = new ArrayList<>();
 		double lat1 = 0;
 		double lon1 = 0;
@@ -153,6 +158,7 @@ public class RoadService {
 				double lat2 = Double.parseDouble(aLine.get(2));
 				double lon2 = Double.parseDouble(aLine.get(3));
 				double distance = new HaversineDistance(lat1, lon1, lat2, lon2).getDistance();
+				// TODO 단위거리에 대해 특정 범위의 오차 허용하기
 				if (unitDistance < distance) {
 					coords.add(new Coord(lat2, lon2, i-1));
 					lat1 = lat2;
@@ -160,7 +166,7 @@ public class RoadService {
 				}
 			}
 		}
-
+		 System.out.println("요청좌표 개수: " + coords.size());
 		return coords;
 	}
 
