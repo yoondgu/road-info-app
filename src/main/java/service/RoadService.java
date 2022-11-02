@@ -24,6 +24,9 @@ import util.HaversineDistance;
 import vo.Coord;
 
 public class RoadService {
+	
+	// 요청할 때마다 OkHttpClient를 새로 만들지 않도록 static 객체로 생성
+	private static OkHttpClient client = new OkHttpClient();
 
 	/**
 	 * skopenapi에서 제공하는 원도로등급 인덱스 별 명칭
@@ -52,7 +55,7 @@ public class RoadService {
 			
 			// SK open API에 http 요청 보내기 : 특정 좌표 리스트에 매칭되는 도로 정보 리스트 요청
 			// OkHttpClient 객체 생성
-			OkHttpClient client = new OkHttpClient();
+			
 			MediaType mediaType = MediaType.parse("application/x-www-form-urlencoded");
 			RequestBody body = RequestBody.create("responseType=1&coords=" + coordsToString(requestCoords), mediaType);
 			Request request = new Request.Builder()
@@ -64,9 +67,14 @@ public class RoadService {
 					.build();
 			Response response = client.newCall(request).execute();
 			
+			String responseBodyString = response.body().string();
+			String message = response.message();
+			int errorCode = response.code();
+			response.close(); // http 통신 스트림 닫기 (메모리 누수 방지)
+			
 			if (response.code() == 200) {
 				// 정상적으로 응답받았을 경우, 응답객체의 내용을 JsonObject, JsonArray 객체로 변환하여 필요한 정보 획득하기
-				JsonElement element = JsonParser.parseString(response.body().string());
+				JsonElement element = JsonParser.parseString(responseBodyString);
 				JsonObject rootob = element.getAsJsonObject().get("resultData").getAsJsonObject();
 				Object matchedPointsObj = rootob.get("matchedPoints");
 				if (matchedPointsObj == null) {
@@ -79,7 +87,7 @@ public class RoadService {
 				
 				return ListResponseData.create(result);
 			} else {
-				return ResponseData.create(false, "SK open API 응답 오류: " + response.message(), response.code());
+				return ResponseData.create(false, "SK open API 응답 오류: " + message, errorCode);
 			}
 			
 		} catch (Exception e) {
